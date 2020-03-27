@@ -11,5 +11,5 @@
         "user": "pwdkpr",
         "password": "pwdkpr"
     },
-    "client_connection_timeout_sec": 5
+    "client_connection_timeout_sec": 60
 }

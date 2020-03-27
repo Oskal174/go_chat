@@ -6,7 +6,9 @@ import (
 )
 
 type Message struct {
-	Raw string
+	RequestId int    `json:"request_id"`
+	Route     string `json:"route"`
+	PostData  string `json:"post_data"`
 }
 
 const MSG_SIZE = 1024

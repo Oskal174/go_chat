@@ -7,8 +7,8 @@ import (
 	"os"
 	"time"
 
-	sio "../utils/sio"
 	logger "../utils/logger"
+	sio "../utils/sio"
 
 	"github.com/jessevdk/go-flags"
 	uuid "github.com/nu7hatch/gouuid"
@@ -108,7 +108,7 @@ func clearSessions(clientSessions map[string]ClientSession, cfg ServerConfig) {
 }
 
 func clientHandler(client ClientSession) {
-	println("New connection from" + client.Conn.RemoteAddr().String())
+	println("New connection from " + client.Conn.RemoteAddr().String())
 	println("Seesion id: " + client.SessionId)
 
 	// main loop
@@ -119,6 +119,6 @@ func clientHandler(client ClientSession) {
 			break
 		}
 
-		logger.Log(logger.INFO, "Recv: " + msg.Raw)
+		logger.Log(logger.INFO, "Recv: "+msg.PostData)
 	}
 }
