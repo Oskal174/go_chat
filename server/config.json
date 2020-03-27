@@ -1,0 +1,15 @@
+{
+    "server": {
+        "host": "localhost",
+        "port": "8080"
+    },
+
+    "db": {
+        "host": "localhost",
+        "port": "3306",
+        "name": "password_keeper",
+        "user": "pwdkpr",
+        "password": "pwdkpr"
+    },
+    "client_connection_timeout_sec": 5
+}
