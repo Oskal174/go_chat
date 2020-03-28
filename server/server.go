@@ -45,7 +45,19 @@ type ClientSession struct {
 	isAuth      bool
 }
 
-// TODO: реализовать логгер событий с уровнями, временем и выбором куда логировать
+type serverContext struct {
+	clientSessions map[string]ClientSession
+	serverRouter   router
+	// Указатель на БД
+}
+
+func createContext() serverContext {
+	var sc serverContext
+	sc.clientSessions = make(map[string]ClientSession)
+	sc.serverRouter = createRouter()
+	return sc
+}
+
 func main() {
 	var opts ServerOptions
 	if _, err := flags.NewParser(&opts, flags.Default).Parse(); err != nil {
@@ -61,8 +73,10 @@ func main() {
 	}
 	defer listener.Close()
 
-	sessions := map[string]ClientSession{}
-	go clearSessions(sessions, cfg)
+	var serverContext serverContext = createContext()
+	serverContext.serverRouter.addRoute("login", loginHandler)
+
+	go clearSessions(serverContext.clientSessions, cfg)
 	for {
 		connection, err := listener.Accept()
 		if err != nil {
@@ -72,9 +86,9 @@ func main() {
 
 		cuuid, _ := uuid.NewV4()
 		client := ClientSession{SessionId: cuuid.String(), Conn: connection, ConnectedIn: time.Now(), isAuth: false}
-		sessions[client.SessionId] = client
+		serverContext.clientSessions[client.SessionId] = client
 
-		go clientHandler(client)
+		go clientHandler(serverContext, client)
 	}
 }
 
@@ -107,7 +121,7 @@ func clearSessions(clientSessions map[string]ClientSession, cfg ServerConfig) {
 	}
 }
 
-func clientHandler(client ClientSession) {
+func clientHandler(context serverContext, client ClientSession) {
 	println("New connection from " + client.Conn.RemoteAddr().String())
 	println("Seesion id: " + client.SessionId)
 
@@ -120,5 +134,17 @@ func clientHandler(client ClientSession) {
 		}
 
 		logger.Log(logger.INFO, "Recv: "+msg.PostData)
+
+		if handler, err := context.serverRouter.getHandler(msg.Route); err == nil {
+			respCode := handler(context, msg.PostData)
+			sio.Send(client.Conn, sio.Message{Route: msg.Route, Code: respCode})
+		} else {
+			logger.Log(logger.ERR, "Unknown route")
+		}
 	}
+}
+
+// TODO: подключить базу и сделать аутентификацию
+func loginHandler(context serverContext, postData string) (statusCode int) {
+	return 200
 }

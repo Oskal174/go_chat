@@ -7,6 +7,7 @@ import (
 
 type Message struct {
 	RequestId int    `json:"request_id"`
+	Code      int    `json:"code"`
 	Route     string `json:"route"`
 	PostData  string `json:"post_data"`
 }

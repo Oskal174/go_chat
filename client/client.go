@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	logger "../utils/logger"
@@ -47,69 +48,109 @@ func main() {
 	logger.Log(logger.INFO, "Connected")
 
 	serverChan := make(chan Message)
-	cliChan := make(chan Message)
+	cliChan := make(chan cliCommand)
 
-	go handleCliCommand(cliChan)
-	go handleServerMsg(conn, serverChan)
+	go waitCliCommand(cliChan)
+	go waitServerCommand(conn, serverChan)
 
 	for {
 		select {
-		case msg := <-cliChan:
-			sendMsg(conn, msg)
-		case msg := <-serverChan:
-			logger.Log(logger.INFO, msg.PostData)
-		case <-time.After(500 * time.Millisecond):
+		case cmd := <-cliChan:
+			handleCliCommand(conn, cmd)
+		case recvMsg := <-serverChan:
+			handleServerMessage(conn, recvMsg)
+		case <-time.After(100 * time.Millisecond):
 			continue
 		}
 
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
-func handleCliCommand(cliChan chan Message) {
-handleCliCommandLoop:
+func waitCliCommand(cliChan chan cliCommand) {
 	for {
-		cmd := getCommand()
-		switch cmd.action {
-		case "help", "h", "Help", "H":
-			println("PRINT HELP TODO")
-		case "exit":
-			cliChan <- Message{Route: "/exit", PostData: "", RequestId: currentRequestId}
-			break handleCliCommandLoop
-		default:
-			println("PRINT HELP TODO")
+		if cmd, err := getCommand(); err == nil {
+			cliChan <- cmd
+		} else {
+			panic(err)
 		}
 
 		time.Sleep(100 * time.Millisecond)
 	}
 }
 
-func handleServerMsg(conn net.Conn, serverChan chan Message) {
+func waitServerCommand(conn net.Conn, serverChan chan Message) {
 	for {
+		if recvMsg, err := sio.Recv(conn); err == nil {
+			serverChan <- recvMsg
+		} else {
+			panic(err)
+		}
 
 		time.Sleep(100 * time.Millisecond)
 	}
 }
 
-// TODO: сделать проверку ситаксиса входной команды
-func getCommand() cliCommand {
+func handleCliCommand(conn net.Conn, cmd cliCommand) {
+	println("!!!!:", cmd.action)
+	switch cmd.action {
+	case "help", "h", "Help", "H":
+		printHelp()
+	case "login", "send": // можно не утруждать клиента валидацией экшена
+		sendMsg := Message{Route: cmd.action, PostData: cmd.params, RequestId: currentRequestId}
+		if err := sio.Send(conn, sendMsg); err != nil {
+			panic(err)
+		}
+	case "exit":
+		sendMsg := Message{Route: "logout"}
+		if err := sio.Send(conn, sendMsg); err != nil {
+			panic(err)
+		}
+		conn.Close()
+		os.Exit(0)
+	default:
+		printHelp()
+	}
+}
+
+func handleServerMessage(conn net.Conn, msg Message) {
+	switch msg.Route {
+	case "send":
+		if msg.Code == 200 {
+			println(msg.PostData)
+		}
+	case "login":
+		if msg.Code == 200 {
+			println("Auth succcess")
+		} else {
+			println("Auth failed")
+		}
+	}
+}
+
+func getCommand() (cliCommand, error) {
 	print("> ")
 	in := bufio.NewReader(os.Stdin)
-	cmdRaw, _ := in.ReadString('\n')
-
-	var cmd = cliCommand{}
-	for i, ch := range cmdRaw {
-		if ch == ' ' {
-			cmd = cliCommand{action: cmdRaw[:i], params: cmdRaw[i+1:]}
-			break
-		}
+	cmdRaw, err := in.ReadString('\n')
+	if err != nil {
+		return cliCommand{}, err
 	}
 
-	return cmd
+	var action, params string
+	if spaceIndex := strings.Index(cmdRaw, " "); spaceIndex == -1 {
+		action = cmdRaw[:len(cmdRaw)-1]
+	} else {
+		action = cmdRaw[:spaceIndex]
+		params = cmdRaw[spaceIndex+1 : len(cmdRaw)-1]
+	}
+
+	return cliCommand{action: action, params: params}, nil
 }
 
-func sendMsg(conn net.Conn, msg Message) {
-	if err := sio.Send(conn, msg); err != nil {
-		panic(err)
-	}
+func printHelp() {
+	println("Help:")
+	println("help - show this help")
+	println("exit - close connection and exit")
+	println("login user pass - authorize on server by login password")
+	println("send text - send message to all users on server")
 }
